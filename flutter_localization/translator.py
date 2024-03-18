@@ -3,6 +3,7 @@ import os
 import json
 import time
 import tkinter as tk
+from dotenv import load_dotenv
 from tkinter.filedialog import askopenfilename
 from deep_translator import GoogleTranslator
 
@@ -57,20 +58,26 @@ class LocalTranslator:
             return data
 
     def __dict_to_arb(self, data: dict[str, str], path: str, lang_code: str)->None:
-        encoded_data = json.dumps(data, indent=4)
+        encoded_data = json.dumps(data, indent=4, ensure_ascii=False)
         full_path = os.path.join(path, f"app_{lang_code}.arb")
         with open(full_path, "w") as file:
             file.write(encoded_data)
 
     def __translate(self, text:str, src:str, out:str)->str:
-        return GoogleTranslator(source="en", target="fr").translate(text=text)
+        out_lang :str = out
+        if out == "zh":
+            out_lang = "zh-CN" # set default chinese to simplified 
+        return GoogleTranslator(source=src, target=out_lang).translate(text=text)
     
-    def translate(self, gui_picker:bool=True, lang_codes:list[str]=[]):
+    def translate(self, gui_picker:bool=True, lang_codes:list[str]=[], ref_path:str=""):
         ref_file_path:str # path of the reference file
-        if(gui_picker):
-            ref_file_path = self.__pick_file()
+        if len(ref_path) > 1:
+            ref_file_path = ref_path
         else:
-            ref_file_path = input("Enter the path: ")
+            if(gui_picker):
+                ref_file_path = self.__pick_file()
+            else:
+                ref_file_path = input("Enter the path: ")
         
         # check if file is the current file path
         if(not self.__check_l10n_path(ref_file_path)):
@@ -102,14 +109,30 @@ class LocalTranslator:
             l_code: str = k
             l_data: dict[str, str] = self.__arb_to_dict(v)
             # translate all items
+            print(f"Translating {l_code}")
             for _k, _v in ref_data.items():
                 # if value in reference data is not in l_data
-                if(l_data[_k] is None):
+                if(l_data.get(_k) is None):
                     # translate the value of the ref to the language of the current
                     output = self.__translate(text=_v, src=ref_code, out=l_code)
                     # add the output of the translation to the data
                     l_data[_k] = output
-            print(f"Translated {l_code}")
+                    print('.', end="")
+            print(f"\nTranslated {l_code}")
             # write the data to file
             self.__dict_to_arb(data=l_data, path=folder_path, lang_code=l_code)
                 
+
+
+if __name__ == "__main__":
+
+    ref_path = "/Users/anthony/Documents/codes/ORGANIZATIONS/MYUR/habit_tracker/lib/l10n/app_en.arb"
+    translator = LocalTranslator()
+    translator.translate(ref_path= ref_path)
+    # dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+    # load_dotenv(dotenv_path)
+    # print(ChatGptTranslator().get_supported_languages(as_dict=True).values())
+    # print('-------------')
+    # print(ChatGptTranslator(source="en", target="zh-CN").translate(text="How do you do"))
+    # print("-----------------")
+    # print(GoogleTranslator().get_supported_languages(as_dict=True).values())
