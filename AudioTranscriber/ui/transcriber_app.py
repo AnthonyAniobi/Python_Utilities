@@ -3,10 +3,10 @@ from tkinter import ttk, filedialog, messagebox
 import threading
 import os
 import sys
-from functions.helpers import segments_to_srt, segments_to_vtt, segments_to_txt
+from functions.helpers import *
 
 class TranscriberApp(tk.Tk):
-    MODELS = ["tiny", "base", "small", "medium", "large"]
+    MODELS  = ["tiny", "base", "small", "medium", "large"]
     FORMATS = [".srt", ".vtt", ".txt"]
  
     def __init__(self):
@@ -16,44 +16,50 @@ class TranscriberApp(tk.Tk):
         self.configure(bg="#1a1a2e")
         self._build_ui()
  
-    # ── UI construction ───────────────────────────────────────────────────────
+    # ── UI ────────────────────────────────────────────────────────────────────
  
     def _build_ui(self):
         PAD = dict(padx=16, pady=6)
  
-        # ── styles ────────────────────────────────────────────────────────────
         style = ttk.Style(self)
         style.theme_use("clam")
  
-        BG, FG      = "#1a1a2e", "#e0e0f0"
-        ACCENT      = "#7b5ea7"
-        ENTRY_BG    = "#16213e"
-        BTN_BG      = "#7b5ea7"
-        BTN_FG      = "#ffffff"
-        BTN_ACTIVE  = "#9b7ec8"
+        BG, FG     = "#1a1a2e", "#e0e0f0"
+        ACCENT     = "#7b5ea7"
+        ENTRY_BG   = "#16213e"
+        BTN_ACTIVE = "#9b7ec8"
  
-        style.configure("TFrame",      background=BG)
-        style.configure("TLabel",      background=BG,      foreground=FG, font=("Segoe UI", 10))
-        style.configure("Header.TLabel", background=BG,    foreground="#c8b1e4",
+        style.configure("TFrame",         background=BG)
+        style.configure("TLabel",         background=BG, foreground=FG,
+                        font=("Segoe UI", 10))
+        style.configure("Header.TLabel",  background=BG, foreground="#c8b1e4",
                         font=("Segoe UI", 18, "bold"))
-        style.configure("Sub.TLabel",  background=BG,      foreground="#888aaa",
+        style.configure("Sub.TLabel",     background=BG, foreground="#888aaa",
                         font=("Segoe UI", 9))
-        style.configure("TEntry",      fieldbackground=ENTRY_BG, foreground=FG,
+        style.configure("Section.TLabel", background=BG, foreground="#a090cc",
+                        font=("Segoe UI", 9, "bold"))
+        style.configure("TEntry",         fieldbackground=ENTRY_BG, foreground=FG,
                         insertcolor=FG, borderwidth=0)
-        style.configure("TCombobox",   fieldbackground=ENTRY_BG, foreground=FG,
+        style.configure("TCombobox",      fieldbackground=ENTRY_BG, foreground=FG,
                         selectbackground=ACCENT, borderwidth=0)
-        style.configure("Accent.TButton", background=BTN_BG, foreground=BTN_FG,
+        style.configure("TSpinbox",       fieldbackground=ENTRY_BG, foreground=FG,
+                        insertcolor=FG, borderwidth=0, arrowcolor=FG)
+        style.configure("Accent.TButton", background=ACCENT, foreground="#ffffff",
                         font=("Segoe UI", 10, "bold"), borderwidth=0, relief="flat")
         style.map("Accent.TButton",
                   background=[("active", BTN_ACTIVE), ("disabled", "#444466")],
                   foreground=[("disabled", "#888888")])
-        style.configure("TProgressbar", troughcolor=ENTRY_BG, background=ACCENT,
+        style.configure("TCheckbutton",   background=BG, foreground=FG,
+                        font=("Segoe UI", 10))
+        style.map("TCheckbutton",         background=[("active", BG)])
+        style.configure("TProgressbar",   troughcolor=ENTRY_BG, background=ACCENT,
                         borderwidth=0, thickness=6)
  
         # ── header ────────────────────────────────────────────────────────────
         hdr = ttk.Frame(self)
         hdr.pack(fill="x", padx=24, pady=(24, 8))
-        ttk.Label(hdr, text="🎬  Video Transcriber", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(hdr, text="🎬  Video Transcriber",
+                  style="Header.TLabel").pack(anchor="w")
         ttk.Label(hdr, text="Generate SRT / VTT / TXT caption files from any video",
                   style="Sub.TLabel").pack(anchor="w")
  
@@ -62,43 +68,41 @@ class TranscriberApp(tk.Tk):
         body = ttk.Frame(self)
         body.pack(fill="both", padx=24, pady=8)
  
-        # ── video file ───────────────────────────────────────────────────────
+        # row 0 – video file
         ttk.Label(body, text="Video File").grid(row=0, column=0, sticky="w", **PAD)
         self.video_var = tk.StringVar()
         ttk.Entry(body, textvariable=self.video_var, width=48).grid(row=0, column=1, **PAD)
         ttk.Button(body, text="Browse…", style="Accent.TButton",
                    command=self._browse_video).grid(row=0, column=2, **PAD)
  
-        # ── export path ───────────────────────────────────────────────────────
+        # row 1 – export folder
         ttk.Label(body, text="Export Folder").grid(row=1, column=0, sticky="w", **PAD)
         self.export_var = tk.StringVar()
         ttk.Entry(body, textvariable=self.export_var, width=48).grid(row=1, column=1, **PAD)
         ttk.Button(body, text="Browse…", style="Accent.TButton",
                    command=self._browse_export).grid(row=1, column=2, **PAD)
  
-        # ── output filename ───────────────────────────────────────────────────
+        # row 2 – output filename
         ttk.Label(body, text="Output Filename").grid(row=2, column=0, sticky="w", **PAD)
         self.filename_var = tk.StringVar(value="transcript")
         ttk.Entry(body, textvariable=self.filename_var, width=30).grid(
             row=2, column=1, sticky="w", **PAD)
  
-        # ── format ────────────────────────────────────────────────────────────
+        # row 3 – caption format
         ttk.Label(body, text="Caption Format").grid(row=3, column=0, sticky="w", **PAD)
         self.format_var = tk.StringVar(value=".srt")
-        fmt_box = ttk.Combobox(body, textvariable=self.format_var, values=self.FORMATS,
-                               state="readonly", width=10)
-        fmt_box.grid(row=3, column=1, sticky="w", **PAD)
+        ttk.Combobox(body, textvariable=self.format_var, values=self.FORMATS,
+                     state="readonly", width=10).grid(row=3, column=1, sticky="w", **PAD)
  
-        # ── whisper model ─────────────────────────────────────────────────────
+        # row 4 – whisper model
         ttk.Label(body, text="Whisper Model").grid(row=4, column=0, sticky="w", **PAD)
         self.model_var = tk.StringVar(value="base")
-        mdl_box = ttk.Combobox(body, textvariable=self.model_var, values=self.MODELS,
-                               state="readonly", width=10)
-        mdl_box.grid(row=4, column=1, sticky="w", **PAD)
+        ttk.Combobox(body, textvariable=self.model_var, values=self.MODELS,
+                     state="readonly", width=10).grid(row=4, column=1, sticky="w", **PAD)
         ttk.Label(body, text="tiny = fastest  |  large = most accurate",
                   style="Sub.TLabel").grid(row=4, column=1, sticky="e", **PAD)
  
-        # ── language (optional) ───────────────────────────────────────────────
+        # row 5 – language
         ttk.Label(body, text="Language (optional)").grid(row=5, column=0, sticky="w", **PAD)
         self.lang_var = tk.StringVar(value="")
         ttk.Entry(body, textvariable=self.lang_var, width=14).grid(
@@ -106,31 +110,80 @@ class TranscriberApp(tk.Tk):
         ttk.Label(body, text='e.g. "en", "fr", "es" — leave blank for auto-detect',
                   style="Sub.TLabel").grid(row=5, column=1, sticky="e", **PAD)
  
+        # ── section divider ───────────────────────────────────────────────────
+        ttk.Separator(body, orient="horizontal").grid(
+            row=6, column=0, columnspan=3, sticky="ew", padx=0, pady=10)
+        ttk.Label(body, text="CAPTION SPLITTING",
+                  style="Section.TLabel").grid(row=7, column=0, sticky="w",
+                                               padx=16, pady=(0, 4))
+ 
+        # row 8 – enable checkbox
+        self.maxchars_enabled = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            body,
+            text="Limit characters per caption (soft guide — words are never cut)",
+            variable=self.maxchars_enabled,
+            style="TCheckbutton",
+            command=self._toggle_maxchars,
+        ).grid(row=8, column=0, columnspan=3, sticky="w", padx=16, pady=4)
+ 
+        # row 9 – spinbox + hint
+        ttk.Label(body, text="Max Characters").grid(row=9, column=0, sticky="w", **PAD)
+ 
+        spin_frame = ttk.Frame(body)
+        spin_frame.grid(row=9, column=1, sticky="w", **PAD)
+ 
+        self.maxchars_var  = tk.IntVar(value=42)
+        self.maxchars_spin = ttk.Spinbox(
+            spin_frame,
+            from_=10, to=500, increment=1,
+            textvariable=self.maxchars_var,
+            width=6,
+            state="disabled",
+        )
+        self.maxchars_spin.pack(side="left")
+ 
+        self.maxchars_hint = ttk.Label(
+            spin_frame,
+            text="  splits at the nearest word boundary around this limit",
+            style="Sub.TLabel",
+        )
+        self.maxchars_hint.pack(side="left")
+        # start hint greyed out
+        self.maxchars_hint.configure(foreground="#555577")
+ 
+        # ── bottom separator ──────────────────────────────────────────────────
         ttk.Separator(self, orient="horizontal").pack(fill="x", padx=24, pady=8)
  
-        # ── progress area ─────────────────────────────────────────────────────
+        # ── progress ──────────────────────────────────────────────────────────
         prog_frame = ttk.Frame(self)
         prog_frame.pack(fill="x", padx=24, pady=(0, 4))
- 
         self.status_var = tk.StringVar(value="Ready")
-        ttk.Label(prog_frame, textvariable=self.status_var, style="Sub.TLabel").pack(
-            anchor="w", pady=(0, 4))
- 
+        ttk.Label(prog_frame, textvariable=self.status_var,
+                  style="Sub.TLabel").pack(anchor="w", pady=(0, 4))
         self.progress = ttk.Progressbar(prog_frame, mode="indeterminate",
                                         style="TProgressbar", length=500)
         self.progress.pack(fill="x")
  
-        # ── action buttons ────────────────────────────────────────────────────
+        # ── buttons ───────────────────────────────────────────────────────────
         btn_row = ttk.Frame(self)
         btn_row.pack(fill="x", padx=24, pady=(8, 24))
- 
         self.run_btn = ttk.Button(btn_row, text="▶  Generate Transcript",
-                                  style="Accent.TButton", command=self._start_transcription)
+                                  style="Accent.TButton",
+                                  command=self._start_transcription)
         self.run_btn.pack(side="right")
+        ttk.Button(btn_row, text="Clear",
+                   command=self._clear).pack(side="right", padx=(0, 8))
  
-        ttk.Button(btn_row, text="Clear", command=self._clear).pack(side="right", padx=(0, 8))
+    # ── toggle ────────────────────────────────────────────────────────────────
  
-    # ── callbacks ────────────────────────────────────────────────────────────
+    def _toggle_maxchars(self):
+        enabled = self.maxchars_enabled.get()
+        self.maxchars_spin.configure(state="normal" if enabled else "disabled")
+        self.maxchars_hint.configure(
+            foreground="#888aaa" if enabled else "#555577")
+ 
+    # ── callbacks ─────────────────────────────────────────────────────────────
  
     def _browse_video(self):
         path = filedialog.askopenfilename(
@@ -142,7 +195,6 @@ class TranscriberApp(tk.Tk):
         )
         if path:
             self.video_var.set(path)
-            # pre-fill export folder & filename from video path
             if not self.export_var.get():
                 self.export_var.set(os.path.dirname(path))
             if not self.filename_var.get() or self.filename_var.get() == "transcript":
@@ -160,17 +212,31 @@ class TranscriberApp(tk.Tk):
         self.format_var.set(".srt")
         self.model_var.set("base")
         self.lang_var.set("")
+        self.maxchars_enabled.set(False)
+        self.maxchars_var.set(42)
+        self._toggle_maxchars()
         self.status_var.set("Ready")
  
     # ── transcription ─────────────────────────────────────────────────────────
  
     def _start_transcription(self):
-        video   = self.video_var.get().strip()
-        folder  = self.export_var.get().strip()
-        name    = self.filename_var.get().strip() or "transcript"
-        fmt     = self.format_var.get()
-        model   = self.model_var.get()
-        lang    = self.lang_var.get().strip() or None
+        video  = self.video_var.get().strip()
+        folder = self.export_var.get().strip()
+        name   = self.filename_var.get().strip() or "transcript"
+        fmt    = self.format_var.get()
+        model  = self.model_var.get()
+        lang   = self.lang_var.get().strip() or None
+        max_ch = 0
+ 
+        if self.maxchars_enabled.get():
+            try:
+                max_ch = int(self.maxchars_var.get())
+                if max_ch < 10:
+                    raise ValueError
+            except (ValueError, tk.TclError):
+                messagebox.showwarning("Invalid value",
+                                       "Max characters must be a whole number ≥ 10.")
+                return
  
         if not video:
             messagebox.showwarning("Missing input", "Please select a video file.")
@@ -181,22 +247,21 @@ class TranscriberApp(tk.Tk):
         if not folder:
             messagebox.showwarning("Missing output", "Please select an export folder.")
             return
-        os.makedirs(folder, exist_ok=True)
  
+        os.makedirs(folder, exist_ok=True)
         out_path = os.path.join(folder, name + fmt)
  
         self.run_btn.configure(state="disabled")
         self.progress.start(12)
         self.status_var.set("Loading Whisper model…")
  
-        thread = threading.Thread(
+        threading.Thread(
             target=self._transcribe,
-            args=(video, out_path, model, lang, fmt),
+            args=(video, out_path, model, lang, fmt, max_ch),
             daemon=True,
-        )
-        thread.start()
+        ).start()
  
-    def _transcribe(self, video_path, out_path, model_name, language, fmt):
+    def _transcribe(self, video_path, out_path, model_name, language, fmt, max_chars):
         try:
             import whisper
         except ImportError:
@@ -215,8 +280,12 @@ class TranscriberApp(tk.Tk):
             if language:
                 kwargs["language"] = language
  
-            result = model.transcribe(video_path, **kwargs)
+            result   = model.transcribe(video_path, **kwargs)
             segments = result.get("segments", [])
+ 
+            if max_chars > 0:
+                self._set_status("Splitting captions by character limit…")
+                segments = apply_max_chars(segments, max_chars)
  
             self._set_status("Writing caption file…")
             if fmt == ".srt":
@@ -244,7 +313,8 @@ class TranscriberApp(tk.Tk):
             self.progress.stop()
             self.status_var.set(f"✅  Saved: {out_path}")
             self.run_btn.configure(state="normal")
-            if messagebox.askyesno("Done!", f"Transcript saved to:\n{out_path}\n\nOpen the folder?"):
+            if messagebox.askyesno("Done!",
+                                   f"Transcript saved to:\n{out_path}\n\nOpen the folder?"):
                 self._open_folder(os.path.dirname(out_path))
         self.after(0, _inner)
  
