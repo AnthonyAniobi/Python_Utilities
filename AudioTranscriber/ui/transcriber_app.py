@@ -5,7 +5,6 @@ import os
 import sys
 from functions.helpers import *
 
- 
 class TranscriberApp(tk.Tk):
     MODELS  = ["tiny", "base", "small", "medium", "large"]
     FORMATS = [".srt", ".vtt", ".txt", ".json (Premiere Pro)"]
@@ -299,11 +298,11 @@ class TranscriberApp(tk.Tk):
     def _transcribe(self, video_path, out_path, model_name, language,
                     fmt, max_chars, max_dur):
         try:
-            import whisper
+            import whisper_timestamped as whisper
         except ImportError:
             self._done_error(
-                "openai-whisper is not installed.\n\n"
-                "Run:  pip install openai-whisper"
+                "whisper-timestamped is not installed.\n\n"
+                "Run:  pip install whisper-timestamped"
             )
             return
  
@@ -311,21 +310,32 @@ class TranscriberApp(tk.Tk):
             self._set_status("Loading Whisper model…")
             model = whisper.load_model(model_name)
  
-            self._set_status("Transcribing — this may take a few minutes…")
-            kwargs = {"verbose": False}
+            self._set_status("Transcribing with word-level timestamps…")
+ 
+            # whisper_timestamped.transcribe() wraps the standard whisper API
+            # and automatically runs DTW alignment for precise per-word timing.
+            kwargs = {
+                "verbose":           None,   # suppress console noise
+                "detect_disfluencies": False, # don't mark um/uh tokens
+            }
             if language:
                 kwargs["language"] = language
  
-            result   = model.transcribe(video_path, **kwargs)
+            # Load audio first (whisper-timestamped expects an audio array)
+            audio  = whisper.load_audio(video_path)
+            result = whisper.transcribe(model, audio, **kwargs)
             segments = result.get("segments", [])
  
-            # Apply splitting in order: duration first, then chars
-            # (duration splits keep word groups intact; chars refines further)
-            if max_dur > 0:
+            # Apply splitting using precise per-word timestamps.
+            # Duration runs first; chars refines further if both are enabled.
+            if max_dur > 0 and max_chars > 0:
+                self._set_status("Splitting captions by duration + character limits…")
+                segments = apply_max_duration(segments, max_dur)
+                segments = apply_max_chars(segments, max_chars)
+            elif max_dur > 0:
                 self._set_status("Splitting captions by duration limit…")
                 segments = apply_max_duration(segments, max_dur)
- 
-            if max_chars > 0:
+            elif max_chars > 0:
                 self._set_status("Splitting captions by character limit…")
                 segments = apply_max_chars(segments, max_chars)
  
